@@ -15,7 +15,7 @@ import { Icon } from './components/icons';
 import { StudyView } from './views/StudyView';
 import { DecksView } from './views/DecksView';
 import { StatsView } from './views/StatsView';
-import schemaSql from '../supabase/schema.sql?raw';
+import { schemaSql } from './lib/schemaSql';
 
 type Tab = 'study' | 'decks' | 'stats';
 
