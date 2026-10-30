@@ -140,3 +140,4 @@ function isNewerVersion(remote: string, current: string): boolean {
 
   return false;
 }
+
