@@ -111,7 +111,8 @@ jobs:
       - name: Initialize Android Target & Icons
         run: |
           npx tauri android init --ci --skip-targets-install
-          npx tauri icon src-tauri/icons/icon.png
+          npx tauri icon --ios-color "#161616" app-icon.png
+          cp -r src-tauri/icons/android/* src-tauri/gen/android/app/src/main/res/
 
       - name: Build Android APK
         env:

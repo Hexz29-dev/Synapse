@@ -24,7 +24,7 @@ function translateAuthError(message: string): string {
 /** Moldura compartilhada: fundo neural + cartão central. */
 export function AuthFrame({ children }: { children: ReactNode }) {
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden bg-[#121212]">
+    <div className="relative flex min-h-[100dvh] min-h-[100svh] flex-col justify-between overflow-x-hidden overflow-y-auto bg-[#121212]">
       <NeuralBackground />
       <div
         className="pointer-events-none absolute inset-0"
@@ -34,7 +34,7 @@ export function AuthFrame({ children }: { children: ReactNode }) {
         }}
       />
 
-      <header className="pointer-events-none relative z-10 flex items-center justify-between gap-2.5 px-5 pt-5 sm:px-10 sm:pt-8">
+      <header className="pointer-events-none relative z-10 flex shrink-0 items-center justify-between gap-2.5 px-5 pt-[max(1.25rem,calc(env(safe-area-inset-top,0px)+0.75rem))] pl-[max(1.25rem,calc(env(safe-area-inset-left,0px)+1.25rem))] pr-[max(1.25rem,calc(env(safe-area-inset-right,0px)+1.25rem))] sm:px-10 sm:pt-8">
         <div className="flex items-center gap-2.5">
           <Logo size={26} inverted />
           <span className="text-[15px] font-semibold tracking-tight text-white">Synapse</span>
@@ -44,7 +44,7 @@ export function AuthFrame({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="pointer-events-none relative z-10 flex min-h-[calc(100dvh-76px)] items-center justify-center px-4 py-6 sm:py-10">
+      <main className="pointer-events-none relative z-10 flex flex-1 items-center justify-center px-4 py-4 sm:py-8">
         <motion.div
           className="pointer-events-auto w-full max-w-[400px]"
           initial={{ opacity: 0, y: 18, scale: 0.98 }}
@@ -55,9 +55,9 @@ export function AuthFrame({ children }: { children: ReactNode }) {
         </motion.div>
       </main>
 
-      <p className="pointer-events-none absolute inset-x-0 bottom-4 z-10 text-center text-xs text-white/35 sm:bottom-5">
+      <footer className="pointer-events-none relative z-10 shrink-0 px-4 pb-[max(2rem,calc(env(safe-area-inset-bottom,0px)+1.25rem))] pt-2 text-center text-xs text-white/35 sm:pb-6">
         Toque no fundo para disparar uma sinapse
-      </p>
+      </footer>
     </div>
   );
 }

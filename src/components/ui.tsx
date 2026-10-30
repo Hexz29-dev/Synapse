@@ -265,7 +265,7 @@ export function Modal({ open, onClose, title, description, children, width = 'ma
                 <Icon.Add className="rotate-45" />
               </IconButton>
             </div>
-            <div className="px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 sm:px-6 sm:pb-6 sm:pt-5">
+            <div className="px-5 pb-[max(1.5rem,calc(env(safe-area-inset-bottom,0px)+1rem))] pl-[max(1.25rem,calc(env(safe-area-inset-left,0px)+1.25rem))] pr-[max(1.25rem,calc(env(safe-area-inset-right,0px)+1.25rem))] pt-4 sm:px-6 sm:pb-6 sm:pt-5">
               {children}
             </div>
           </motion.div>
@@ -333,7 +333,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={push}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 sm:bottom-5">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-[60] flex flex-col items-center gap-2 px-4 sm:bottom-5">
         <AnimatePresence initial={false}>
           {toasts.map((t) => (
             <motion.div

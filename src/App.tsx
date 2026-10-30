@@ -112,7 +112,7 @@ function Workspace({ session }: { session: Session }) {
   return (
     <div className="min-h-[100dvh] bg-canvas text-ink">
       {/* Navegação superior */}
-      <header className="sticky top-0 z-30 border-b border-line bg-canvas/85 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-line bg-canvas/85 backdrop-blur-md pt-[env(safe-area-inset-top,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-2 px-4 sm:h-16 sm:px-6">
           <div className="flex items-center gap-6">
             <button
@@ -196,7 +196,7 @@ function Workspace({ session }: { session: Session }) {
       </header>
 
       {/* Conteúdo principal (com espaço inferior para a barra de abas no mobile) */}
-      <main className="mx-auto max-w-5xl px-4 pb-24 pt-5 sm:px-6 sm:py-10">
+      <main className="mx-auto max-w-5xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] pt-5 pl-[max(1rem,calc(env(safe-area-inset-left,0px)+1rem))] pr-[max(1rem,calc(env(safe-area-inset-right,0px)+1rem))] sm:px-6 sm:py-10">
         {library.status === 'loading' ? (
           <div className="flex min-h-[50vh] items-center justify-center">
             <Spinner />
@@ -256,7 +256,7 @@ function Workspace({ session }: { session: Session }) {
       {/* Barra de navegação inferior para mobile (zona do polegar) */}
       <nav
         aria-label="Navegação móvel"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 px-3 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-md sm:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 px-3 pb-[max(0.75rem,calc(env(safe-area-inset-bottom,0px)+0.5rem))] pl-[max(0.75rem,calc(env(safe-area-inset-left,0px)+0.75rem))] pr-[max(0.75rem,calc(env(safe-area-inset-right,0px)+0.75rem))] pt-1.5 backdrop-blur-md sm:hidden"
       >
         <div className="mx-auto grid max-w-md grid-cols-3 gap-1">
           {navItems.map((item) => {

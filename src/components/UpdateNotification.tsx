@@ -74,7 +74,7 @@ export function UpdateBanner() {
         transition={softSpring}
         role="status"
         aria-live="polite"
-        className="fixed top-4 inset-x-4 sm:inset-x-auto sm:right-6 sm:max-w-md z-50 rounded-2xl bg-surface/95 backdrop-blur-md p-4 shadow-overlay ring-1 ring-line"
+        className="fixed top-[max(1rem,calc(env(safe-area-inset-top,0px)+0.75rem))] inset-x-4 sm:inset-x-auto sm:right-6 sm:max-w-md z-50 rounded-2xl bg-surface/95 backdrop-blur-md p-4 shadow-overlay ring-1 ring-line"
       >
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sunken text-ink">
