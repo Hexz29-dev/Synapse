@@ -83,47 +83,67 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r27c
-          link-to-sdk: true
+      - name: Configure Android SDK & NDK Environment
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          # O runner ubuntu-latest já vem com Android SDK e NDK pré-instalados
+          NDK_DIR=$(ls -d $ANDROID_HOME/ndk/* 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$NDK_DIR" ]; then
+            echo "Instalando NDK via sdkmanager..."
+            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+            $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;27.1.12297006"
+            NDK_DIR="$ANDROID_HOME/ndk/27.1.12297006"
+          fi
+          echo "NDK_HOME=$NDK_DIR" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$NDK_DIR" >> $GITHUB_ENV
+          echo "NDK selecionado: $NDK_DIR"
+          # Aceita automaticamente quaisquer licenças pendentes do SDK
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Setup Rust & Android targets
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
       - name: Install dependencies
         run: npm install
 
       - name: Initialize Android Target
         run: npx tauri android init --ci --skip-targets-install
-        env:
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
       - name: Build Android APK
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          npx tauri android build --apk --split-per-abi=false
+          npx tauri android build --apk --target aarch64 --target armv7 --target x86_64
 
-      - name: Rename and Prepare APK
+      - name: Prepare APKs
         run: |
           mkdir -p release-apk
-          find src-tauri/gen/android -name "*.apk" -exec cp {} release-apk/Synapse-Android.apk \; || true
+          for f in $(find src-tauri/gen/android -name "*.apk" 2>/dev/null); do
+            echo "Copiando $f"
+            cp "$f" release-apk/
+          done
+          # Cria também uma cópia amigável com nome fixo Synapse.apk
+          MAIN_APK=$(find release-apk -name "*universal*.apk" -o -name "*release*.apk" 2>/dev/null | head -n 1)
+          if [ -n "$MAIN_APK" ]; then
+            cp "$MAIN_APK" release-apk/Synapse-Android.apk
+          fi
           ls -la release-apk/
 
-      - name: Upload APK to Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Upload APK as Workflow Artifact
+        uses: actions/upload-artifact@v4
         with:
+          name: synapse-android-apk
+          path: release-apk/*.apk
+          retention-days: 14
+
+      - name: Upload APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ github.ref_name }}
           files: release-apk/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
