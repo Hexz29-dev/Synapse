@@ -78,7 +78,8 @@ export async function checkForUpdate(): Promise<{
 
     if (latestVersion && isNewerVersion(latestVersion, currentVersion)) {
       const apkAsset = Array.isArray(data.assets)
-        ? data.assets.find((a: any) => typeof a.name === 'string' && a.name.endsWith('.apk'))
+        ? data.assets.find((a: any) => a.name === 'Synapse-Android.apk') ||
+          data.assets.find((a: any) => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.apk'))
         : null;
 
       return {
@@ -147,4 +148,76 @@ function isNewerVersion(remote: string, current: string): boolean {
 
   return false;
 }
+
+export interface WebInstallerInfo {
+  platform: 'android' | 'desktop';
+  url: string;
+  version?: string;
+}
+
+let cachedInstallerPromise: Promise<WebInstallerInfo> | null = null;
+
+/**
+ * Obtém o link direto para download do instalador mais recente no GitHub Releases:
+ * - Android: arquivo .apk (Synapse-Android.apk)
+ * - Computador: instalador NSIS (.exe)
+ */
+export function getWebInstallerInfo(): Promise<WebInstallerInfo> {
+  if (cachedInstallerPromise) return cachedInstallerPromise;
+
+  const isAndroid = isAndroidUserAgent();
+  const platform: 'android' | 'desktop' = isAndroid ? 'android' : 'desktop';
+  const fallbackUrl = isAndroid
+    ? 'https://github.com/Hexz29-dev/Synapse/releases/latest/download/Synapse-Android.apk'
+    : 'https://github.com/Hexz29-dev/Synapse/releases/latest';
+
+  cachedInstallerPromise = (async () => {
+    try {
+      const res = await fetch('https://api.github.com/repos/Hexz29-dev/Synapse/releases/latest', {
+        headers: { Accept: 'application/vnd.github.v3+json' },
+      });
+
+      if (!res.ok) {
+        return { platform, url: fallbackUrl };
+      }
+
+      const data = await res.json();
+      const version = (data.tag_name || '').replace(/^v/, '') || undefined;
+      const assets: any[] = Array.isArray(data.assets) ? data.assets : [];
+
+      if (isAndroid) {
+        const apkAsset =
+          assets.find((a) => a.name === 'Synapse-Android.apk') ||
+          assets.find((a) => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.apk'));
+
+        return {
+          platform,
+          url: apkAsset?.browser_download_url || fallbackUrl,
+          version,
+        };
+      }
+
+      // Computador: procura instalador NSIS (*-setup.exe ou .exe sem .sig)
+      const nsisAsset =
+        assets.find((a) => typeof a.name === 'string' && a.name.toLowerCase().endsWith('-setup.exe')) ||
+        assets.find(
+          (a) =>
+            typeof a.name === 'string' &&
+            a.name.toLowerCase().endsWith('.exe') &&
+            !a.name.toLowerCase().endsWith('.sig')
+        );
+
+      return {
+        platform,
+        url: nsisAsset?.browser_download_url || data.html_url || fallbackUrl,
+        version,
+      };
+    } catch {
+      return { platform, url: fallbackUrl };
+    }
+  })();
+
+  return cachedInstallerPromise;
+}
+
 

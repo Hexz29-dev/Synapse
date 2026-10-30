@@ -12,6 +12,7 @@ import { CardEditor, DeckEditor } from './components/Editors';
 import { MarkdownContent } from './components/MarkdownContent';
 import { Button, IconButton, Logo, Spinner, ToastProvider, softSpring, spring, useToast } from './components/ui';
 import { Icon } from './components/icons';
+import { InstallAppButton } from './components/InstallAppButton';
 import { UpdateBanner } from './components/UpdateNotification';
 import { StudyView } from './views/StudyView';
 import { DecksView } from './views/DecksView';
@@ -168,6 +169,8 @@ function Workspace({ session }: { session: Session }) {
                 <span className="tabular">{streak}d</span>
               </div>
             )}
+
+            <InstallAppButton />
 
             <Button size="sm" icon={<Icon.Add size={16} />} onClick={() => openNewCard()}>
               <span className="hidden sm:inline">Novo cartão</span>

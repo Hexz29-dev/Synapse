@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useAnimationControls } from 'motion/react';
 import { supabase } from '../../lib/supabase';
 import { Button, Field, IconButton, Logo, softSpring, spring } from '../ui';
 import { Icon } from '../icons';
+import { InstallAppButton } from '../InstallAppButton';
 import { NeuralBackground } from './NeuralBackground';
 
 type Mode = 'signin' | 'signup' | 'reset';
@@ -33,9 +34,14 @@ export function AuthFrame({ children }: { children: ReactNode }) {
         }}
       />
 
-      <header className="pointer-events-none relative z-10 flex items-center gap-2.5 px-5 pt-5 sm:px-10 sm:pt-8">
-        <Logo size={26} inverted />
-        <span className="text-[15px] font-semibold tracking-tight text-white">Synapse</span>
+      <header className="pointer-events-none relative z-10 flex items-center justify-between gap-2.5 px-5 pt-5 sm:px-10 sm:pt-8">
+        <div className="flex items-center gap-2.5">
+          <Logo size={26} inverted />
+          <span className="text-[15px] font-semibold tracking-tight text-white">Synapse</span>
+        </div>
+        <div className="pointer-events-auto">
+          <InstallAppButton variant="auth" />
+        </div>
       </header>
 
       <main className="pointer-events-none relative z-10 flex min-h-[calc(100dvh-76px)] items-center justify-center px-4 py-6 sm:py-10">
