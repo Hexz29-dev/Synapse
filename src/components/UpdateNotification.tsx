@@ -15,10 +15,12 @@ export function UpdateBanner() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    // Verifica atualizações automaticamente 3 segundos após o início
+    if (!isTauri()) return;
+
+    // Verifica atualizações automaticamente 3 segundos após o início (apenas no Tauri)
     const timer = setTimeout(async () => {
       try {
-        const info = await checkForUpdate('1.0.0');
+        const info = await checkForUpdate();
         if (info.available) {
           setStatus((prev) => ({
             ...prev,
@@ -36,7 +38,7 @@ export function UpdateBanner() {
     return () => clearTimeout(timer);
   }, []);
 
-  if (!status.available || dismissed) return null;
+  if (!isTauri() || !status.available || dismissed) return null;
 
   const isAndroid = isAndroidUserAgent();
   const isDesktop = isTauri() && !isAndroid;

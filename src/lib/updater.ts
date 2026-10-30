@@ -27,17 +27,22 @@ export function isAndroidUserAgent(): boolean {
 let activeTauriUpdate: any = null;
 
 /**
- * Verifica se há uma nova versão disponível.
- * No Windows (Tauri): consulta o endpoint configurado no tauri.conf.json com assinatura criptográfica.
- * No Android/Web: consulta a API pública de releases do GitHub do Synapse.
+ * Verifica se há uma nova versão disponível (apenas no app Tauri).
+ * No Desktop (Tauri): consulta o endpoint configurado no tauri.conf.json com assinatura criptográfica.
+ * No Android (Tauri): consulta a API pública de releases do GitHub do Synapse.
+ * Na Web (navegador comum): retorna { available: false } imediatamente.
  */
-export async function checkForUpdate(currentVersion: string = '1.0.0'): Promise<{
+export async function checkForUpdate(): Promise<{
   available: boolean;
   version?: string;
   notes?: string;
   apkDownloadUrl?: string;
 }> {
-  if (isTauri()) {
+  if (!isTauri()) {
+    return { available: false };
+  }
+
+  if (!isAndroidUserAgent()) {
     try {
       const { check } = await import('@tauri-apps/plugin-updater');
       const update = await check();
@@ -50,15 +55,18 @@ export async function checkForUpdate(currentVersion: string = '1.0.0'): Promise<
           notes: update.body || 'Correções e melhorias de desempenho.',
         };
       }
-
-      return { available: false };
     } catch (err: any) {
       console.warn('[Updater] Erro ao verificar via Tauri updater:', err);
     }
+
+    return { available: false };
   }
 
-  // Fallback: consulta direta aos releases do GitHub
+  // No Android (Tauri): consulta direta aos releases do GitHub para baixar o APK
   try {
+    const { getVersion } = await import('@tauri-apps/api/app');
+    const currentVersion = await getVersion();
+
     const res = await fetch('https://api.github.com/repos/Hexz29-dev/Synapse/releases/latest', {
       headers: { Accept: 'application/vnd.github.v3+json' },
     });
@@ -69,7 +77,6 @@ export async function checkForUpdate(currentVersion: string = '1.0.0'): Promise<
     const latestVersion = (data.tag_name || '').replace(/^v/, '');
 
     if (latestVersion && isNewerVersion(latestVersion, currentVersion)) {
-      // Procura asset APK para Android
       const apkAsset = Array.isArray(data.assets)
         ? data.assets.find((a: any) => typeof a.name === 'string' && a.name.endsWith('.apk'))
         : null;
