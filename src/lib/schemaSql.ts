@@ -122,3 +122,4 @@ create policy "review_logs_delete_own" on public.review_logs for delete to authe
 -- Atualiza o cache de schema da API REST
 notify pgrst, 'reload schema';
 `;
+

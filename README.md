@@ -78,6 +78,7 @@ Inspirado nos conceitos originais do algoritmo **SuperMemo-2 (SM-2)** e na esté
 | **Animações** | [Motion](https://motion.dev/) (Framer Motion moderno) |
 | **Banco & Auth** | [Supabase](https://supabase.com/) (PostgreSQL + RLS) |
 | **Ícones** | [mx-icons](https://www.npmjs.com/package/mx-icons) (SVG inline árvore-shakable) |
+| **Desktop & Mobile** | [Tauri v2](https://v2.tauri.app/) (Rust + WebView nativo para Windows & Android) |
 
 ---
 
@@ -117,12 +118,60 @@ O script irá criar:
 * Tabela `public.review_logs` (histórico de avaliações)
 * Índices de performance e políticas completas de **Row-Level Security (RLS)**
 
-### 5. Iniciar o servidor de desenvolvimento
+### 5. Iniciar o servidor de desenvolvimento web
 ```bash
 npm run dev
 ```
 
-Acesse **http://localhost:5174** no seu navegador.
+Acesse **http://localhost:5173** no seu navegador.
+
+---
+
+## ✦ Aplicativo Desktop (Windows) e Mobile (Android) via Tauri v2
+
+O Synapse pode ser executado e compilado nativamente para **Windows (.exe / .msi)** e **Android (.apk)** utilizando [Tauri v2](https://v2.tauri.app/).
+
+### 1. Rodar localmente como aplicativo desktop no Windows
+```bash
+npm run tauri dev
+```
+
+### 2. Gerar instalador para Windows de produção
+```bash
+npm run tauri build
+```
+Os arquivos gerados estarão disponíveis em:
+`src-tauri/target/release/bundle/nsis/` (.exe) e `src-tauri/target/release/bundle/msi/` (.msi).
+
+### 3. Gerar APK para Android
+Com o Android SDK e NDK configurados (via Android Studio):
+```bash
+npm run tauri android build -- --apk
+```
+O arquivo `.apk` será gerado em:
+`src-tauri/gen/android/app/build/outputs/apk/universal/release/`
+
+---
+
+## ✦ Atualizações Automáticas (Auto-Update)
+
+O Synapse conta com atualização automática embutida tanto no desktop quanto no mobile:
+
+1. **No Windows (Tauri Updater)**:
+   * O aplicativo verifica silenciosamente ao iniciar se há uma versão mais recente publicada nos releases do GitHub.
+   * Quando uma nova versão é detectada, uma notificação discreta aparece oferecendo a opção de **"Atualizar e reiniciar"**.
+   * O download é verificado criptograficamente com a chave pública do Tauri e aplicado sem necessidade de reinstalar o aplicativo manualmente.
+
+2. **No Android (APK)**:
+   * O aplicativo detecta a versão e exibe um atalho direto para download e instalação do APK mais recente disponibilizado no GitHub Release.
+
+3. **Lançamento Automático via GitHub Actions (CI/CD)**:
+   O repositório inclui a pipeline [.github/workflows/release.yml](.github/workflows/release.yml). Sempre que você subir uma tag de versão, a compilação e a distribuição do Windows (.exe, .msi, artefatos de update) e Android (.apk) acontecem 100% de forma automática na nuvem:
+   ```bash
+   git tag v1.0.1
+   git push origin v1.0.1
+   ```
+   *Basta configurar os Secrets `TAURI_SIGNING_PRIVATE_KEY`, `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` nas configurações do repositório no GitHub.*
 
 ---
 

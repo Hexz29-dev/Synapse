@@ -1,0 +1,52 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Synapse",
+  "version": "1.0.0",
+  "identifier": "com.synapse.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Synapse",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 380,
+        "minHeight": 540,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERFMDY3NDQ0QzdFQ0RCQ0YKUldUUDIrekhSSFFHM2tpbFFVMUxDbWFuYllyZzVDVEV0YkJmcW9yNy9PR1FRdEhpTlFXVU9ZWnIK",
+      "endpoints": [
+        "https://github.com/Hexz29-dev/Synapse/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

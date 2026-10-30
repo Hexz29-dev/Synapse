@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão para lançar (ex: 1.0.1)'
+        required: false
+        default: ''
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Compilação Desktop (Windows .exe, .msi e artefatos de Auto-Update)
+  # ---------------------------------------------------------------------------
+  release-windows:
+    name: Build Windows & Auto-Update
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Tauri Desktop (Windows)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Synapse v__VERSION__'
+          releaseBody: |
+            ## O que há de novo no Synapse v__VERSION__
+            
+            Consulte os arquivos para download abaixo:
+            - **Windows**: Baixe o instalador `.exe` (NSIS) ou `.msi`. O app atualizará automaticamente nas próximas versões!
+            - **Android**: Baixe o arquivo `.apk` diretamente para seu celular.
+          releaseDraft: false
+          prerelease: false
+
+  # ---------------------------------------------------------------------------
+  # 2. Compilação Mobile (Android APK)
+  # ---------------------------------------------------------------------------
+  release-android:
+    name: Build Android APK
+    needs: release-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27c
+          link-to-sdk: true
+
+      - name: Setup Rust & Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Initialize Android Target
+        run: npx tauri android init --ci --skip-targets-install
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: Build Android APK
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          npx tauri android build --apk --split-per-abi=false
+
+      - name: Rename and Prepare APK
+        run: |
+          mkdir -p release-apk
+          find src-tauri/gen/android -name "*.apk" -exec cp {} release-apk/Synapse-Android.apk \; || true
+          ls -la release-apk/
+
+      - name: Upload APK to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: release-apk/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

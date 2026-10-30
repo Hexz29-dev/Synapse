@@ -12,6 +12,7 @@ import { CardEditor, DeckEditor } from './components/Editors';
 import { MarkdownContent } from './components/MarkdownContent';
 import { Button, IconButton, Logo, Spinner, ToastProvider, softSpring, spring, useToast } from './components/ui';
 import { Icon } from './components/icons';
+import { UpdateBanner } from './components/UpdateNotification';
 import { StudyView } from './views/StudyView';
 import { DecksView } from './views/DecksView';
 import { StatsView } from './views/StatsView';
@@ -22,6 +23,7 @@ type Tab = 'study' | 'decks' | 'stats';
 export function App() {
   return (
     <ToastProvider>
+      <UpdateBanner />
       <Root />
     </ToastProvider>
   );

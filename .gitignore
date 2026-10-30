@@ -5,4 +5,7 @@ dist
 .env.*.local
 *.log
 .DS_Store
+*.key
+src-tauri/target/
+src-tauri/gen/
 .env.example
