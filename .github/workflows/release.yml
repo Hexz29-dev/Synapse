@@ -108,8 +108,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Initialize Android Target
-        run: npx tauri android init --ci --skip-targets-install
+      - name: Initialize Android Target & Icons
+        run: |
+          npx tauri android init --ci --skip-targets-install
+          npx tauri icon src-tauri/icons/icon.png
 
       - name: Build Android APK
         env:
@@ -118,18 +120,52 @@ jobs:
         run: |
           npx tauri android build --apk --target aarch64 --target armv7 --target x86_64
 
-      - name: Prepare APKs
+      - name: Sign & Prepare APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           mkdir -p release-apk
-          for f in $(find src-tauri/gen/android -name "*.apk" 2>/dev/null); do
-            echo "Copiando $f"
-            cp "$f" release-apk/
-          done
-          # Cria também uma cópia amigável com nome fixo Synapse.apk
-          MAIN_APK=$(find release-apk -name "*universal*.apk" -o -name "*release*.apk" 2>/dev/null | head -n 1)
-          if [ -n "$MAIN_APK" ]; then
-            cp "$MAIN_APK" release-apk/Synapse-Android.apk
+          UNSIGNED_APK=$(find src-tauri/gen/android -name "*universal*release*.apk" -o -name "*.apk" 2>/dev/null | head -n 1)
+          if [ -z "$UNSIGNED_APK" ]; then
+            echo "Erro: APK compilado não encontrado!"
+            exit 1
           fi
+          echo "APK encontrado: $UNSIGNED_APK"
+
+          KEYSTORE_FILE="release-key.jks"
+          KS_PASS="${ANDROID_KEYSTORE_PASSWORD:-SynapseRelease2026!}"
+          KS_ALIAS="${ANDROID_KEY_ALIAS:-synapse}"
+
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_FILE"
+          else
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE_FILE" \
+              -alias "$KS_ALIAS" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "$KS_PASS" \
+              -keypass "$KS_PASS" \
+              -dname "CN=Synapse, OU=Mobile, O=Hexz29, L=SaoPaulo, ST=SP, C=BR"
+          fi
+
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
+          echo "Usando build-tools: $BUILD_TOOLS_DIR"
+
+          "$BUILD_TOOLS_DIR/zipalign" -f -p 4 "$UNSIGNED_APK" release-apk/Synapse-aligned.apk
+          "$BUILD_TOOLS_DIR/apksigner" sign \
+            --ks "$KEYSTORE_FILE" \
+            --ks-key-alias "$KS_ALIAS" \
+            --ks-pass "pass:$KS_PASS" \
+            --key-pass "pass:$KS_PASS" \
+            --out release-apk/Synapse-Android.apk \
+            release-apk/Synapse-aligned.apk
+
+          rm -f release-apk/Synapse-aligned.apk "$KEYSTORE_FILE"
+          "$BUILD_TOOLS_DIR/apksigner" verify --verbose release-apk/Synapse-Android.apk
           ls -la release-apk/
 
       - name: Upload APK as Workflow Artifact
