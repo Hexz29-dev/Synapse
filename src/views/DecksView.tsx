@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { Deck, Flashcard } from '../types/flashcard';
 import type { Library } from '../hooks/useLibrary';
-import { getMemoryStage, isCardDue } from '../lib/sm2';
+import { getMemoryStage } from '../lib/sm2';
 import { formatRelative, plural } from '../lib/format';
+import { dueCount } from '../lib/stats';
 import { stripMarkdown } from '../components/MarkdownContent';
 import { Button, ConfirmDialog, IconButton, softSpring, spring } from '../components/ui';
 import { Icon } from '../components/icons';
@@ -37,7 +38,7 @@ export function DecksView({
   onEditCard,
   onStudyDeck,
 }: DecksViewProps) {
-  const { decks, cards, deleteDeck, deleteCard } = library;
+  const { decks, cards, logs, dailyNewLimit, deleteDeck, deleteCard } = library;
   const [query, setQuery] = useState('');
   const [confirmDeck, setConfirmDeck] = useState<Deck | null>(null);
   const [confirmCard, setConfirmCard] = useState<Flashcard | null>(null);
@@ -49,7 +50,11 @@ export function DecksView({
 
   const statsFor = (deckId: string) => {
     const list = cards.filter((c) => c.deckId === deckId);
-    return { total: list.length, due: list.filter((c) => isCardDue(c)).length };
+    const deckLogs = logs.filter((l) => l.deckId === deckId);
+    return {
+      total: list.length,
+      due: dueCount(list, new Date(), { logs: deckLogs, dailyNewLimit }),
+    };
   };
 
   const deckCards = useMemo(() => {

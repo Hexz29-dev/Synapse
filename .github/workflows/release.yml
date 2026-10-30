@@ -38,6 +38,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Run Lint & Unit Tests
+        run: |
+          npm run lint
+          npm test
+
       - name: Build Tauri Desktop (Windows)
         uses: tauri-apps/tauri-action@v0
         env:

@@ -114,5 +114,76 @@ create policy "review_logs_insert_own" on public.review_logs for insert to authe
 create policy "review_logs_delete_own" on public.review_logs for delete to authenticated
   using ((select auth.uid()) = user_id);
 
+-- ============================================================================
+-- 4. Função RPC transacional para registrar revisão (cartão + log atômicos)
+-- ============================================================================
+create or replace function public.review_card(
+  p_card_id         uuid,
+  p_log_id          uuid,
+  p_grade           smallint,
+  p_repetition      integer,
+  p_interval_before numeric(10, 4),
+  p_interval_after  numeric(10, 4),
+  p_ease_after      numeric(4, 2),
+  p_due_at          timestamptz,
+  p_reviewed_at     timestamptz,
+  p_lapses          integer
+)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := (select auth.uid());
+  v_deck_id uuid;
+begin
+  if v_user_id is null then
+    raise exception 'Não autenticado' using errcode = '42501';
+  end if;
+
+  update public.cards
+     set repetition       = p_repetition,
+         interval_days    = p_interval_after,
+         ease_factor      = p_ease_after,
+         due_at           = p_due_at,
+         last_reviewed_at = p_reviewed_at,
+         lapses           = p_lapses
+   where id = p_card_id
+     and user_id = v_user_id
+  returning deck_id into v_deck_id;
+
+  if v_deck_id is null then
+    raise exception 'Cartão não encontrado' using errcode = 'P0002';
+  end if;
+
+  insert into public.review_logs (
+    id,
+    user_id,
+    card_id,
+    deck_id,
+    grade,
+    interval_before,
+    interval_after,
+    ease_after,
+    reviewed_at
+  ) values (
+    p_log_id,
+    v_user_id,
+    p_card_id,
+    v_deck_id,
+    p_grade,
+    p_interval_before,
+    p_interval_after,
+    p_ease_after,
+    p_reviewed_at
+  )
+  on conflict (id) do nothing;
+end;
+$$;
+
+revoke all on function public.review_card(uuid, uuid, smallint, integer, numeric, numeric, numeric, timestamptz, timestamptz, integer) from public, anon;
+grant execute on function public.review_card(uuid, uuid, smallint, integer, numeric, numeric, numeric, timestamptz, timestamptz, integer) to authenticated;
+
 -- Atualiza o cache de schema da API REST
 notify pgrst, 'reload schema';

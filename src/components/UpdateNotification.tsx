@@ -30,7 +30,7 @@ export function UpdateBanner() {
             apkDownloadUrl: info.apkDownloadUrl,
           }));
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.warn('Erro ao verificar atualização:', err);
       }
     }, 3000);
@@ -55,11 +55,11 @@ export function UpdateBanner() {
         await installUpdate((progress) => {
           setStatus((s) => ({ ...s, downloadProgress: progress }));
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         setStatus((s) => ({
           ...s,
           downloading: false,
-          error: err?.message || 'Falha ao instalar atualização.',
+          error: err instanceof Error ? err.message : 'Falha ao instalar atualização.',
         }));
       }
     }

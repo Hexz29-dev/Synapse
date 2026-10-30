@@ -22,12 +22,12 @@ const GRADE_META = {
 } as const;
 
 export function StatsView({ library }: { library: Library }) {
-  const { decks, cards, logs } = library;
+  const { decks, cards, logs, dailyNewLimit } = library;
 
   const streak = useMemo(() => computeStreak(logs), [logs]);
   const retention = useMemo(() => computeRetention(logs), [logs]);
   const todayCount = useMemo(() => reviewedToday(logs), [logs]);
-  const due = useMemo(() => dueCount(cards), [cards]);
+  const due = useMemo(() => dueCount(cards, new Date(), { logs, dailyNewLimit }), [cards, logs, dailyNewLimit]);
   const stages = useMemo(() => stageBreakdown(cards), [cards]);
   const nextDays = useMemo(() => forecast(cards, 7), [cards]);
   const activity = useMemo(() => activityByDay(logs, 84), [logs]); // 12 semanas

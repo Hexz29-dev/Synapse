@@ -1,7 +1,9 @@
 import type { Flashcard, ReviewLog } from '../types/flashcard';
-import { getMemoryStage, isCardDue } from './sm2';
+import { getMemoryStage, isCardDue, LEARN_AHEAD_MS } from './sm2';
 
 const DAY = 86_400_000;
+
+export const DEFAULT_DAILY_NEW_LIMIT = 20;
 
 export const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 export const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -33,7 +35,69 @@ export function reviewedToday(logs: ReviewLog[], now = new Date()): number {
   return logs.filter((l) => dayKey(new Date(l.reviewedAt)) === key).length;
 }
 
-export function dueCount(cards: Flashcard[], now = new Date()): number {
+/** Quantidade de cartões inéditos (intervalBefore === 0) introduzidos hoje. */
+export function newCardsReviewedToday(logs: ReviewLog[], now = new Date()): number {
+  const key = dayKey(now);
+  const seen = new Set<string>();
+  for (const l of logs) {
+    if (l.intervalBefore === 0 && dayKey(new Date(l.reviewedAt)) === key) {
+      seen.add(l.cardId);
+    }
+  }
+  return seen.size;
+}
+
+/**
+ * Monta a fila de estudo respeitando a janela de antecipação (`aheadMs`)
+ * e o limite diário de cartões novos (`dailyNewLimit`).
+ */
+export function buildDueQueue(
+  cards: Flashcard[],
+  logs: ReviewLog[] = [],
+  options: {
+    dailyNewLimit?: number;
+    aheadMs?: number;
+    now?: Date;
+  } = {}
+): Flashcard[] {
+  const now = options.now ?? new Date();
+  const aheadMs = options.aheadMs ?? LEARN_AHEAD_MS;
+  const dailyNewLimit = options.dailyNewLimit ?? Infinity;
+  const cutoff = now.getTime() + aheadMs;
+
+  const dueCards = cards
+    .filter((c) => new Date(c.dueAt).getTime() <= cutoff)
+    .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+
+  if (!Number.isFinite(dailyNewLimit)) {
+    return dueCards;
+  }
+
+  const newIntroduced = newCardsReviewedToday(logs, now);
+  let remainingNew = Math.max(0, dailyNewLimit - newIntroduced);
+
+  return dueCards.filter((card) => {
+    if (getMemoryStage(card) !== 'new') return true;
+    if (remainingNew > 0) {
+      remainingNew -= 1;
+      return true;
+    }
+    return false;
+  });
+}
+
+export function dueCount(
+  cards: Flashcard[],
+  now = new Date(),
+  options?: { logs?: ReviewLog[]; dailyNewLimit?: number; aheadMs?: number }
+): number {
+  if (options?.dailyNewLimit !== undefined || options?.aheadMs !== undefined) {
+    return buildDueQueue(cards, options.logs ?? [], {
+      dailyNewLimit: options.dailyNewLimit,
+      aheadMs: options.aheadMs ?? 0,
+      now,
+    }).length;
+  }
   return cards.filter((c) => isCardDue(c, now)).length;
 }
 
@@ -70,4 +134,3 @@ export function forecast(cards: Flashcard[], days: number, now = new Date()) {
     return { date: new Date(start), count };
   });
 }
-

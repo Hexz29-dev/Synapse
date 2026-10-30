@@ -15,6 +15,32 @@ export interface AppUpdateStatus {
   apkDownloadUrl?: string;
 }
 
+interface TauriDownloadEvent {
+  event: 'Started' | 'Progress' | 'Finished';
+  data?: {
+    contentLength?: number;
+    chunkLength?: number;
+  };
+}
+
+interface TauriUpdateHandle {
+  version: string;
+  body?: string;
+  downloadAndInstall: (onEvent: (event: TauriDownloadEvent) => void) => Promise<void>;
+}
+
+interface GitHubAsset {
+  name?: string;
+  browser_download_url?: string;
+}
+
+interface GitHubReleaseResponse {
+  tag_name?: string;
+  body?: string;
+  html_url?: string;
+  assets?: GitHubAsset[];
+}
+
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
 }
@@ -24,7 +50,7 @@ export function isAndroidUserAgent(): boolean {
 }
 
 // Guarda a instância ativa da atualização Tauri para poder baixar e instalar quando o usuário aceitar
-let activeTauriUpdate: any = null;
+let activeTauriUpdate: TauriUpdateHandle | null = null;
 
 /**
  * Verifica se há uma nova versão disponível (apenas no app Tauri).
@@ -48,14 +74,14 @@ export async function checkForUpdate(): Promise<{
       const update = await check();
 
       if (update) {
-        activeTauriUpdate = update;
+        activeTauriUpdate = update as unknown as TauriUpdateHandle;
         return {
           available: true,
           version: update.version,
           notes: update.body || 'Correções e melhorias de desempenho.',
         };
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn('[Updater] Erro ao verificar via Tauri updater:', err);
     }
 
@@ -73,14 +99,15 @@ export async function checkForUpdate(): Promise<{
 
     if (!res.ok) return { available: false };
 
-    const data = await res.json();
+    const data = (await res.json()) as GitHubReleaseResponse;
     const latestVersion = (data.tag_name || '').replace(/^v/, '');
 
     if (latestVersion && isNewerVersion(latestVersion, currentVersion)) {
-      const apkAsset = Array.isArray(data.assets)
-        ? data.assets.find((a: any) => a.name === 'Synapse-Android.apk') ||
-          data.assets.find((a: any) => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.apk'))
-        : null;
+      const assets = Array.isArray(data.assets) ? data.assets : [];
+      const apkAsset =
+        assets.find((a) => a.name === 'Synapse-Android.apk') ||
+        assets.find((a) => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.apk')) ||
+        null;
 
       return {
         available: true,
@@ -110,7 +137,7 @@ export async function installUpdate(
   let downloaded = 0;
   let contentLength = 0;
 
-  await activeTauriUpdate.downloadAndInstall((event: any) => {
+  await activeTauriUpdate.downloadAndInstall((event: TauriDownloadEvent) => {
     switch (event.event) {
       case 'Started':
         contentLength = event.data?.contentLength || 0;
@@ -181,9 +208,9 @@ export function getWebInstallerInfo(): Promise<WebInstallerInfo> {
         return { platform, url: fallbackUrl };
       }
 
-      const data = await res.json();
+      const data = (await res.json()) as GitHubReleaseResponse;
       const version = (data.tag_name || '').replace(/^v/, '') || undefined;
-      const assets: any[] = Array.isArray(data.assets) ? data.assets : [];
+      const assets: GitHubAsset[] = Array.isArray(data.assets) ? data.assets : [];
 
       if (isAndroid) {
         const apkAsset =
@@ -219,5 +246,3 @@ export function getWebInstallerInfo(): Promise<WebInstallerInfo> {
 
   return cachedInstallerPromise;
 }
-
-

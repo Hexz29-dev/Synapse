@@ -10,4 +10,3 @@ dist
 *.keystore
 src-tauri/target/
 src-tauri/gen/
-.env.example

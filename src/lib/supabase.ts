@@ -34,17 +34,49 @@ function check(error: PgError): void {
 }
 
 // ---------------------------------------------------------------------------
-// Mapeadores snake_case (Postgres) ↔ camelCase (app)
+// Tipos das linhas do Postgres e Mapeadores snake_case ↔ camelCase
 // ---------------------------------------------------------------------------
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const toDeck = (d: any): Deck => ({
+interface DeckRow {
+  id: string;
+  title: string;
+  description: string | null;
+  created_at: string;
+}
+
+interface CardRow {
+  id: string;
+  deck_id: string;
+  front: string;
+  back: string;
+  tags: string[] | null;
+  repetition: number | string | null;
+  interval_days: number | string | null;
+  ease_factor: number | string | null;
+  due_at: string;
+  last_reviewed_at: string | null;
+  lapses: number | string | null;
+  created_at: string;
+}
+
+interface ReviewLogRow {
+  id: string;
+  card_id: string;
+  deck_id: string;
+  grade: number | string;
+  interval_before: number | string | null;
+  interval_after: number | string | null;
+  ease_after: number | string | null;
+  reviewed_at: string;
+}
+
+const toDeck = (d: DeckRow): Deck => ({
   id: d.id,
   title: d.title,
   description: d.description ?? '',
   createdAt: d.created_at,
 });
 
-const toCard = (c: any): Flashcard => ({
+const toCard = (c: CardRow): Flashcard => ({
   id: c.id,
   deckId: c.deck_id,
   front: c.front,
@@ -59,7 +91,7 @@ const toCard = (c: any): Flashcard => ({
   createdAt: c.created_at,
 });
 
-const toLog = (l: any): ReviewLog => ({
+const toLog = (l: ReviewLogRow): ReviewLog => ({
   id: l.id,
   cardId: l.card_id,
   deckId: l.deck_id,
@@ -69,7 +101,29 @@ const toLog = (l: any): ReviewLog => ({
   easeAfter: Number(l.ease_after ?? 2.5),
   reviewedAt: l.reviewed_at,
 });
-/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// ---------------------------------------------------------------------------
+// Paginação automática para contornar o limite de 1000 linhas do PostgREST
+// ---------------------------------------------------------------------------
+const PAGE_SIZE = 1000;
+
+export async function fetchAllPages<T>(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: PgError }>
+): Promise<T[]> {
+  const rows: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await fetchPage(offset, offset + PAGE_SIZE - 1);
+    check(error);
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return rows;
+}
 
 // ---------------------------------------------------------------------------
 // Leitura
@@ -78,21 +132,42 @@ export async function fetchLibrary(userId: string): Promise<{ decks: Deck[]; car
   const db = requireClient();
   const since = new Date(Date.now() - 400 * 86_400_000).toISOString();
 
-  const [d, c, l] = await Promise.all([
-    db.from('decks').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
-    db.from('cards').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
-    db
-      .from('review_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('reviewed_at', since)
-      .order('reviewed_at', { ascending: false }),
+  const [deckRows, cardRows, logRows] = await Promise.all([
+    fetchAllPages<DeckRow>((from, to) =>
+      db
+        .from('decks')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to)
+    ),
+    fetchAllPages<CardRow>((from, to) =>
+      db
+        .from('cards')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to)
+    ),
+    fetchAllPages<ReviewLogRow>((from, to) =>
+      db
+        .from('review_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('reviewed_at', since)
+        .order('reviewed_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to)
+    ),
   ]);
-  check(d.error);
-  check(c.error);
-  check(l.error);
 
-  return { decks: (d.data ?? []).map(toDeck), cards: (c.data ?? []).map(toCard), logs: (l.data ?? []).map(toLog) };
+  return {
+    decks: deckRows.map(toDeck),
+    cards: cardRows.map(toCard),
+    logs: logRows.map(toLog),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +183,7 @@ export async function insertDeck(
     .select()
     .single();
   check(error);
-  return toDeck(data);
+  return toDeck(data as DeckRow);
 }
 
 export async function updateDeckRow(
@@ -148,7 +223,7 @@ export async function insertCard(userId: string, input: CardInput): Promise<Flas
     .select()
     .single();
   check(error);
-  return toCard(data);
+  return toCard(data as CardRow);
 }
 
 export async function updateCardContent(userId: string, id: string, input: CardInput): Promise<void> {
@@ -166,34 +241,21 @@ export async function deleteCardRow(userId: string, id: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Revisão
+// Revisão (atômica via RPC `review_card`)
 // ---------------------------------------------------------------------------
-export async function persistReview(userId: string, card: Flashcard, log: ReviewLog): Promise<void> {
+export async function persistReview(_userId: string, card: Flashcard, log: ReviewLog): Promise<void> {
   const db = requireClient();
-  const { error: cardErr } = await db
-    .from('cards')
-    .update({
-      repetition: card.repetition,
-      interval_days: card.intervalDays,
-      ease_factor: card.easeFactor,
-      due_at: card.dueAt,
-      last_reviewed_at: card.lastReviewedAt,
-      lapses: card.lapses,
-    })
-    .eq('id', card.id)
-    .eq('user_id', userId);
-  check(cardErr);
-
-  const { error: logErr } = await db.from('review_logs').insert({
-    id: log.id,
-    user_id: userId,
-    card_id: log.cardId,
-    deck_id: log.deckId,
-    grade: log.grade,
-    interval_before: log.intervalBefore,
-    interval_after: log.intervalAfter,
-    ease_after: log.easeAfter,
-    reviewed_at: log.reviewedAt,
+  const { error } = await db.rpc('review_card', {
+    p_card_id: card.id,
+    p_log_id: log.id,
+    p_grade: log.grade,
+    p_repetition: card.repetition,
+    p_interval_before: log.intervalBefore,
+    p_interval_after: card.intervalDays,
+    p_ease_after: card.easeFactor,
+    p_due_at: card.dueAt,
+    p_reviewed_at: log.reviewedAt,
+    p_lapses: card.lapses,
   });
-  check(logErr);
+  check(error);
 }

@@ -84,7 +84,10 @@ function Workspace({ session }: { session: Session }) {
     defaultDeckId: string | null;
   }>({ open: false, card: null, defaultDeckId: null });
 
-  const due = dueCount(library.cards);
+  const due = dueCount(library.cards, new Date(), {
+    logs: library.logs,
+    dailyNewLimit: library.dailyNewLimit,
+  });
   const streak = computeStreak(library.logs);
 
   const handleSignOut = async () => {
@@ -160,6 +163,24 @@ function Workspace({ session }: { session: Session }) {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {(!library.isOnline || library.pendingSyncCount > 0) && (
+              <button
+                type="button"
+                onClick={() => void library.syncPendingReviews()}
+                title={
+                  !library.isOnline
+                    ? `Modo offline${library.pendingSyncCount > 0 ? ` · ${library.pendingSyncCount} para sincronizar` : ''}`
+                    : `Sincronizando ${library.pendingSyncCount} ${library.pendingSyncCount === 1 ? 'revisão' : 'revisões'}`
+                }
+                className="inline-flex items-center gap-1 rounded-lg bg-sunken px-2 py-1 text-xs font-medium text-muted ring-1 ring-line transition-colors hover:text-ink sm:px-2.5 sm:py-1.5"
+              >
+                <Icon.Refresh size={13} />
+                <span className="tabular">
+                  {!library.isOnline ? 'Offline' : `${library.pendingSyncCount}`}
+                </span>
+              </button>
+            )}
+
             {streak > 0 && (
               <div
                 title={`Ofensiva de ${streak} ${streak === 1 ? 'dia' : 'dias'}`}

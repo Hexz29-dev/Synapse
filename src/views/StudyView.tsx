@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import type { Flashcard, ReviewGrade } from '../types/flashcard';
+import type { Flashcard, ReviewGrade, ReviewLog } from '../types/flashcard';
 import type { Library } from '../hooks/useLibrary';
-import { getMemoryStage, previewNextIntervals } from '../lib/sm2';
+import { getMemoryStage, LEARN_AHEAD_MS, previewNextIntervals } from '../lib/sm2';
 import { formatRelative, plural } from '../lib/format';
-import { reviewedToday } from '../lib/stats';
+import { buildDueQueue, reviewedToday } from '../lib/stats';
 import { MarkdownContent } from '../components/MarkdownContent';
 import { Button, Kbd, softSpring, spring } from '../components/ui';
 import { Icon } from '../components/icons';
-
-const LEARN_AHEAD_MS = 20 * 60_000;
 
 const GRADES: { grade: ReviewGrade; label: string; dot: string }[] = [
   { grade: 1, label: 'Errei', dot: 'bg-again' },
@@ -17,6 +15,15 @@ const GRADES: { grade: ReviewGrade; label: string; dot: string }[] = [
   { grade: 3, label: 'Bom', dot: 'bg-good' },
   { grade: 4, label: 'Fácil', dot: 'bg-easy' },
 ];
+
+const DAILY_LIMIT_OPTIONS = [
+  { value: 10, label: '10 novos/dia' },
+  { value: 20, label: '20 novos/dia' },
+  { value: 30, label: '30 novos/dia' },
+  { value: 50, label: '50 novos/dia' },
+  { value: 100, label: '100 novos/dia' },
+  { value: 9999, label: 'Sem limite' },
+] as const;
 
 const STAGE_LABEL = { new: 'Novo', learning: 'Aprendendo', young: 'Recente', mature: 'Consolidado' } as const;
 
@@ -29,16 +36,23 @@ interface StudyViewProps {
   onEditCard: (card: Flashcard) => void;
 }
 
-export function StudyView({ library, deckScope, onDeckScopeChange, onCreateDeck, onCreateCard, onEditCard }: StudyViewProps) {
-  const { decks, cards, logs, reviewCard } = library;
+export function StudyView({
+  library,
+  deckScope,
+  onDeckScopeChange,
+  onCreateDeck,
+  onCreateCard,
+  onEditCard,
+}: StudyViewProps) {
+  const { decks, cards, logs, dailyNewLimit, setDailyNewLimit, reviewCard } = library;
   const [revealed, setRevealed] = useState(false);
   const [ahead, setAhead] = useState(false);
   const [sessionDone, setSessionDone] = useState<Set<string>>(() => new Set());
-  const [tick, setTick] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   // Reavalia a fila a cada 30s (cartões de aprendizado voltam após alguns minutos)
   useEffect(() => {
-    const t = setInterval(() => setTick((v) => v + 1), 30_000);
+    const t = setInterval(() => setNowMs(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);
 
@@ -52,17 +66,30 @@ export function StudyView({ library, deckScope, onDeckScopeChange, onCreateDeck,
     [cards, deckScope]
   );
 
+  const scopedLogs = useMemo(
+    () => (deckScope ? logs.filter((l) => l.deckId === deckScope) : logs),
+    [logs, deckScope]
+  );
+
   const queue = useMemo(() => {
-    const limit = Date.now() + LEARN_AHEAD_MS;
-    const list = ahead
-      ? scoped.filter((c) => !sessionDone.has(c.id))
-      : scoped.filter((c) => new Date(c.dueAt).getTime() <= limit);
-    return [...list].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scoped, ahead, sessionDone, tick]);
+    const referenceNow = new Date(nowMs);
+    if (ahead) {
+      return [...scoped]
+        .filter((c) => !sessionDone.has(c.id))
+        .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+    }
+    return buildDueQueue(scoped, scopedLogs, {
+      dailyNewLimit,
+      aheadMs: LEARN_AHEAD_MS,
+      now: referenceNow,
+    });
+  }, [scoped, scopedLogs, ahead, sessionDone, dailyNewLimit, nowMs]);
 
   const current = queue[0] ?? null;
-  const intervals = useMemo(() => (current ? previewNextIntervals(current) : null), [current]);
+  const intervals = useMemo(
+    () => (current ? previewNextIntervals(current, new Date(nowMs)) : null),
+    [current, nowMs]
+  );
   const deckOf = (id: string) => decks.find((d) => d.id === id);
 
   useEffect(() => setRevealed(false), [current?.id]);
@@ -71,7 +98,8 @@ export function StudyView({ library, deckScope, onDeckScopeChange, onCreateDeck,
     (g: ReviewGrade) => {
       if (!current || !revealed) return;
       if (ahead) setSessionDone((prev) => new Set(prev).add(current.id));
-      reviewCard(current, g);
+      setNowMs(Date.now());
+      void reviewCard(current, g);
     },
     [current, revealed, ahead, reviewCard]
   );
@@ -97,7 +125,7 @@ export function StudyView({ library, deckScope, onDeckScopeChange, onCreateDeck,
     return () => window.removeEventListener('keydown', onKey);
   }, [current, revealed, grade, onEditCard]);
 
-  const doneToday = reviewedToday(deckScope ? logs.filter((l) => l.deckId === deckScope) : logs);
+  const doneToday = reviewedToday(scopedLogs);
   const total = doneToday + queue.length;
   const progress = total === 0 ? 0 : doneToday / total;
 
@@ -118,7 +146,35 @@ export function StudyView({ library, deckScope, onDeckScopeChange, onCreateDeck,
 
   return (
     <div className="mx-auto w-full max-w-[720px]">
-      <DeckScopeBar decks={decks} cards={cards} value={deckScope} onChange={onDeckScopeChange} />
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <DeckScopeBar
+            decks={decks}
+            cards={cards}
+            logs={logs}
+            dailyNewLimit={dailyNewLimit}
+            nowMs={nowMs}
+            value={deckScope}
+            onChange={onDeckScopeChange}
+          />
+        </div>
+
+        <label className="shrink-0" title="Limite diário de cartões novos">
+          <span className="sr-only">Limite diário de cartões novos</span>
+          <select
+            aria-label="Limite diário de cartões novos"
+            value={dailyNewLimit}
+            onChange={(e) => setDailyNewLimit(Number(e.target.value))}
+            className="h-8 cursor-pointer rounded-full border border-line bg-surface px-3 text-xs font-medium text-muted outline-none transition-colors hover:border-line-strong hover:text-ink focus:border-ink"
+          >
+            {DAILY_LIMIT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {scoped.length === 0 ? (
         <EmptyState
@@ -133,7 +189,11 @@ export function StudyView({ library, deckScope, onDeckScopeChange, onCreateDeck,
       ) : !current ? (
         <SessionComplete
           doneToday={doneToday}
-          nextDue={[...scoped].sort((a, b) => a.dueAt.localeCompare(b.dueAt))[0]?.dueAt}
+          nextDue={
+            [...scoped]
+              .filter((c) => getMemoryStage(c) !== 'new')
+              .sort((a, b) => a.dueAt.localeCompare(b.dueAt))[0]?.dueAt
+          }
           onStudyAhead={() => {
             setSessionDone(new Set());
             setAhead(true);
@@ -313,17 +373,30 @@ export function StudyView({ library, deckScope, onDeckScopeChange, onCreateDeck,
 function DeckScopeBar({
   decks,
   cards,
+  logs,
+  dailyNewLimit,
+  nowMs,
   value,
   onChange,
 }: {
   decks: Library['decks'];
   cards: Flashcard[];
+  logs: ReviewLog[];
+  dailyNewLimit: number;
+  nowMs: number;
   value: string | null;
   onChange: (id: string | null) => void;
 }) {
-  const now = Date.now() + LEARN_AHEAD_MS;
-  const due = (deckId: string | null) =>
-    cards.filter((c) => (!deckId || c.deckId === deckId) && new Date(c.dueAt).getTime() <= now).length;
+  const referenceNow = new Date(nowMs);
+  const due = (deckId: string | null) => {
+    const deckCards = deckId ? cards.filter((c) => c.deckId === deckId) : cards;
+    const deckLogs = deckId ? logs.filter((l) => l.deckId === deckId) : logs;
+    return buildDueQueue(deckCards, deckLogs, {
+      dailyNewLimit,
+      aheadMs: LEARN_AHEAD_MS,
+      now: referenceNow,
+    }).length;
+  };
 
   const items = [{ id: null as string | null, title: 'Todos' }, ...decks.map((d) => ({ id: d.id, title: d.title }))];
 
